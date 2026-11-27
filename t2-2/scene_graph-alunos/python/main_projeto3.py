@@ -90,7 +90,9 @@ def on_key (event: Any) -> None:
 def main () -> None:
   global canvas, device, context, renderer
 
-  canvas = RenderCanvas(size=(800, 600), title="Projeto 3", update_mode="continuous", max_fps=60)
+  # $fps e $ms sao substituidos pelo rendercanvas a cada quadro (analise de desempenho)
+  canvas = RenderCanvas(size=(800, 600), title="Projeto 3 - $fps fps ($ms ms)",
+                        update_mode="continuous", max_fps=60)
   adapter = wgpu.gpu.request_adapter_sync()
   device = adapter.request_device_sync()
   context = canvas.get_context("wgpu")
