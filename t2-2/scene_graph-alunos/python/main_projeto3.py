@@ -25,10 +25,13 @@ context: Any
 renderer: Renderer
 camera: Camera3D
 scene: Scene
+root: Node
 
 # amostras por pixel do passe principal (MSAA); Renderer e todos os
 # pipelines desse passe precisam usar o mesmo valor
 SAMPLE_COUNT = 4
+# pipeline do passe principal para cada contagem (tecla m alterna 1x/4x)
+pipelines: dict[int, Pipeline] = {}
 
 # Medicao do tempo de render. O FPS da janela nao serve: no macOS o compositor
 # so entrega a textura da tela a 60 Hz (get_current_texture bloqueia), mesmo sem vsync.
@@ -49,7 +52,7 @@ def make_trf (tx: float, ty: float, tz: float,
 
 
 def initialize (device: wgpu.GPUDevice, target_format: str) -> None:
-  global camera, scene
+  global camera, scene, root
 
   camera = Camera3D(4.5, 4.0, 7.0)
   camera.set_center(0.0, 0.8, 0.0)
@@ -75,8 +78,10 @@ def initialize (device: wgpu.GPUDevice, target_format: str) -> None:
     {"array_stride": 3 * 4, "step_mode": "vertex",
      "attributes": [{"format": "float32x3", "offset": 0, "var_name": "normal"}]},
   ])
-  pipeline = Pipeline(shader, target_format, primitive={"cull_mode": "back"},
-                      multisample={"count": SAMPLE_COUNT})
+  # pipelines sao imutaveis: um para cada contagem de amostras
+  for count in (1, 4):
+    pipelines[count] = Pipeline(shader, target_format, primitive={"cull_mode": "back"},
+                                multisample={"count": count})
   for mat in (cinza, amarelo, vermelho, verde):
     shader.add_material(mat)
 
@@ -85,7 +90,7 @@ def initialize (device: wgpu.GPUDevice, target_format: str) -> None:
   esfera_vermelha = Node(None, make_trf(1.4, 0.6, -0.4, 0.6, 0.6, 0.6), [vermelho], [sphere])
   esfera_verde = Node(None, make_trf(0.2, 0.3, 1.5, 0.3, 0.3, 0.3), [verde], [sphere])
 
-  root = Node(pipeline, nodes=[chao, caixa, esfera_vermelha, esfera_verde])
+  root = Node(pipelines[SAMPLE_COUNT], nodes=[chao, caixa, esfera_vermelha, esfera_verde])
   scene = Scene(root)
 
 
@@ -103,15 +108,25 @@ def draw () -> None:
 
   # media de ~1 s no titulo, com a resolucao em pixels fisicos
   if time.perf_counter() - render_t_last >= 1.0:
-    canvas.set_title(f"Projeto 3 - $fps fps | render {render_ms_sum / render_frames:.2f} ms"
+    canvas.set_title(f"Projeto 3 - MSAA {renderer.sample_count}x | $fps fps"
+                     f" | render {render_ms_sum / render_frames:.2f} ms"
                      f" | {target_texture.width}x{target_texture.height}")
     render_ms_sum, render_frames = 0.0, 0
     render_t_last = time.perf_counter()
 
 
 def on_key (event: Any) -> None:
+  global render_ms_sum, render_frames, render_t_last
   if event["key"] == "q":
     canvas.close()
+  elif event["key"] == "m":
+    # troca a contagem no Renderer (recria as texturas) e o pipeline da raiz
+    count = 1 if renderer.sample_count == 4 else 4
+    renderer.sample_count = count
+    root.set_pipeline(pipelines[count])
+    # reinicia a media para nao misturar medidas de 1x e 4x
+    render_ms_sum, render_frames = 0.0, 0
+    render_t_last = time.perf_counter()
 
 
 def main () -> None:
