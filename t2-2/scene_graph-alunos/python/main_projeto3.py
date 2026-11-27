@@ -18,6 +18,10 @@ from scene import *
 from renderer import *
 from cube import *
 from sphere import *
+from skybox import *
+from texcube import *
+from sampler import *
+from textureset import *
 
 canvas: RenderCanvas
 device: wgpu.GPUDevice
@@ -32,6 +36,10 @@ root: Node
 SAMPLE_COUNT = 4
 # pipeline do passe principal para cada contagem (tecla m alterna 1x/4x)
 pipelines: dict[int, Pipeline] = {}
+
+# pipeline do sky
+sky_pipelines: dict[int, Pipeline] = {}
+sky_node: Node
 
 # Medicao do tempo de render. O FPS da janela nao serve: no macOS o compositor
 # so entrega a textura da tela a 60 Hz (get_current_texture bloqueia), mesmo sem vsync.
@@ -52,7 +60,7 @@ def make_trf (tx: float, ty: float, tz: float,
 
 
 def initialize (device: wgpu.GPUDevice, target_format: str) -> None:
-  global camera, scene, root
+  global camera, scene, root, sky_node
 
   camera = Camera3D(4.5, 4.0, 7.0)
   camera.set_center(0.0, 0.8, 0.0)
@@ -85,12 +93,32 @@ def initialize (device: wgpu.GPUDevice, target_format: str) -> None:
   for mat in (cinza, amarelo, vermelho, verde):
     shader.add_material(mat)
 
+
+    # skybox: shader proprio, sem luz, e pipeline proprio sem escrita de profundidade
+  env = TexCube(device, "environment_texture", "../images/skybox.jpg")
+  env_sampler = Sampler(device, "environment_sampler",
+                        address_mode_u="clamp-to-edge", address_mode_v="clamp-to-edge")
+  env_textures = TextureSet([env, env_sampler])
+
+  shader_sky = Shader(device, "../shaders/ilum_frag/skybox.wgsl", space="world")
+  shader_sky.set_vertex_buffers([
+    {"array_stride": 3 * 4, "step_mode": "vertex",
+     "attributes": [{"format": "float32x3", "offset": 0, "var_name": "coord"}]},
+  ])
+  for count in (1, 4):
+    sky_pipelines[count] = Pipeline(shader_sky, target_format,
+                                    primitive={"cull_mode": "none"},
+                                    depth_stencil={"depth_write_enabled": False},
+                                    multisample={"count": count})
+  shader_sky.add_texture_set(env_textures)
+  sky_node = Node(sky_pipelines[SAMPLE_COUNT], SkyBoxTransform(), [env_textures], [SkyBox(device)])
+
   chao = Node(None, make_trf(0.0, -0.2, 0.0, 10.0, 0.2, 10.0), [cinza], [cube])
   caixa = Node(None, make_trf(-1.2, 0.0, 0.2, ry=25.0), [amarelo], [cube])
   esfera_vermelha = Node(None, make_trf(1.4, 0.6, -0.4, 0.6, 0.6, 0.6), [vermelho], [sphere])
   esfera_verde = Node(None, make_trf(0.2, 0.3, 1.5, 0.3, 0.3, 0.3), [verde], [sphere])
 
-  root = Node(pipelines[SAMPLE_COUNT], nodes=[chao, caixa, esfera_vermelha, esfera_verde])
+  root = Node(pipelines[SAMPLE_COUNT], nodes=[sky_node, chao, caixa, esfera_vermelha, esfera_verde])
   scene = Scene(root)
 
 
@@ -124,6 +152,7 @@ def on_key (event: Any) -> None:
     count = 1 if renderer.sample_count == 4 else 4
     renderer.sample_count = count
     root.set_pipeline(pipelines[count])
+    sky_node.set_pipeline(sky_pipelines[count])
     # reinicia a media para nao misturar medidas de 1x e 4x
     render_ms_sum, render_frames = 0.0, 0
     render_t_last = time.perf_counter()
