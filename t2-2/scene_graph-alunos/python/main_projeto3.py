@@ -26,6 +26,10 @@ renderer: Renderer
 camera: Camera3D
 scene: Scene
 
+# amostras por pixel do passe principal (MSAA); Renderer e todos os
+# pipelines desse passe precisam usar o mesmo valor
+SAMPLE_COUNT = 4
+
 # Medicao do tempo de render. O FPS da janela nao serve: no macOS o compositor
 # so entrega a textura da tela a 60 Hz (get_current_texture bloqueia), mesmo sem vsync.
 render_ms_sum = 0.0
@@ -71,7 +75,8 @@ def initialize (device: wgpu.GPUDevice, target_format: str) -> None:
     {"array_stride": 3 * 4, "step_mode": "vertex",
      "attributes": [{"format": "float32x3", "offset": 0, "var_name": "normal"}]},
   ])
-  pipeline = Pipeline(shader, target_format, primitive={"cull_mode": "back"})
+  pipeline = Pipeline(shader, target_format, primitive={"cull_mode": "back"},
+                      multisample={"count": SAMPLE_COUNT})
   for mat in (cinza, amarelo, vermelho, verde):
     shader.add_material(mat)
 
@@ -122,7 +127,8 @@ def main () -> None:
   target_format = context.get_preferred_format(device.adapter)
   context.configure(device=device, format=target_format)
 
-  renderer = Renderer(device, depth_test=True, clear_value=(0.9, 0.9, 0.9, 1.0))
+  renderer = Renderer(device, depth_test=True, clear_value=(0.9, 0.9, 0.9, 1.0),
+                      sample_count=SAMPLE_COUNT)
 
   initialize(device, target_format)
 
