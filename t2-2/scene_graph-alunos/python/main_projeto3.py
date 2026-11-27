@@ -117,10 +117,9 @@ def on_key (event: Any) -> None:
 def main () -> None:
   global canvas, device, context, renderer
 
-  # $fps e $ms sao substituidos pelo rendercanvas a cada quadro (analise de desempenho);
-  # sem vsync e com max_fps alto o FPS nao fica preso a taxa do monitor
+  # $fps e $ms sao substituidos pelo rendercanvas a cada quadro (analise de desempenho)
   canvas = RenderCanvas(size=(800, 600), title="Projeto 3 - $fps fps ($ms ms)",
-                        update_mode="continuous", max_fps=1000, vsync=False)
+                        update_mode="continuous", max_fps=60)
   adapter = wgpu.gpu.request_adapter_sync()
   device = adapter.request_device_sync()
   context = canvas.get_context("wgpu")
